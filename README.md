@@ -32,8 +32,14 @@ All commands require `Manage Guild` permission.
 
 ### Role Menu Commands
 ```
-/rolemenu create <role> [label]   # Create a button role menu
+/rolemenu create <role> [label]                    # Create a new role menu
+/rolemenu addbutton <message_id> <role> [label]   # Add a button to an existing menu
 ```
+
+**Usage Example:**
+1. `/rolemenu create @Member "Join Members"` - Creates menu with first button
+2. `/rolemenu addbutton <message_id> @Moderator "Join Mods"` - Adds button to same message
+3. `/rolemenu addbutton <message_id> @Premium` - Adds another button
 
 ## Setup
 

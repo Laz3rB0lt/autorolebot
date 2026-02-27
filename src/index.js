@@ -86,6 +86,29 @@ const commands = [
                         .setRequired(false)
                 )
         )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('addbutton')
+                .setDescription('Add a button to an existing role menu')
+                .addStringOption(option =>
+                    option
+                        .setName('message_id')
+                        .setDescription('The message ID of the menu')
+                        .setRequired(true)
+                )
+                .addRoleOption(option =>
+                    option
+                        .setName('role')
+                        .setDescription('The role to toggle')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option
+                        .setName('label')
+                        .setDescription('Button label (defaults to role name)')
+                        .setRequired(false)
+                )
+        )
 ];
 
 client.once('ready', async () => {
@@ -200,6 +223,17 @@ client.on('interactionCreate', async interaction => {
                 } catch (err) {
                     console.error('Failed to create role menu', err);
                     return interaction.reply({ content: 'There was an error creating the role menu.', ephemeral: true });
+                }
+            } else if (subcommand === 'addbutton') {
+                const messageId = options.getString('message_id');
+                const role = options.getRole('role');
+                const label = options.getString('label');
+                try {
+                    await rolesModule.addButtonToMenu(interaction.channel, messageId, role, label);
+                    return interaction.reply(`✅ Added **${label || role.name}** button to the menu.`);
+                } catch (err) {
+                    console.error('Failed to add button to menu', err);
+                    return interaction.reply({ content: 'Could not find that message or add the button.', ephemeral: true });
                 }
             }
         }

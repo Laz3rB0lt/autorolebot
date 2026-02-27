@@ -19,7 +19,7 @@ async function createRoleMenu(messageOrObj, role, label) {
 
     const row = new ActionRowBuilder().addComponents(button);
     const sent = await send({
-        content: `Click the button to toggle **${role.name}**`,
+        content: `Click the buttons to toggle roles`,
         components: [row]
     });
 
@@ -36,6 +36,67 @@ async function createRoleMenu(messageOrObj, role, label) {
     storage.saveData(data);
 }
 
+/**
+ * Add a button to an existing role menu message.
+ * @param {Channel} channel - the text channel
+ * @param {string} messageId - the message ID to edit
+ * @param {Role} role - the role to toggle
+ * @param {string} label - optional button label
+ */
+async function addButtonToMenu(channel, messageId, role, label) {
+    const message = await channel.messages.fetch(messageId);
+    if (!message) throw new Error('Message not found');
+
+    // Get existing buttons from the message
+    const existingRows = message.components || [];
+    const buttons = [];
+
+    // Collect all existing buttons
+    for (const row of existingRows) {
+        for (const component of row.components) {
+            if (component.type === 2) { // Button type
+                buttons.push(component);
+            }
+        }
+    }
+
+    // Create new button
+    const newButton = new ButtonBuilder()
+        .setCustomId(`roleMenu:${message.guildId}:${role.id}`)
+        .setLabel(label || role.name)
+        .setStyle(ButtonStyle.Primary);
+
+    buttons.push(newButton);
+
+    // Organize buttons into rows (5 per row max)
+    const rows = [];
+    for (let i = 0; i < buttons.length; i += 5) {
+        const rowButtons = buttons.slice(i, i + 5);
+        rows.push(new ActionRowBuilder().addComponents(rowButtons));
+    }
+
+    // Edit the message
+    await message.edit({ components: rows });
+
+    // Update storage
+    const data = storage.loadData();
+    const guildData = storage.ensureGuild(data, message.guildId);
+    guildData.roleMenus = guildData.roleMenus || [];
+    
+    // Add to stored menus if not already there
+    const exists = guildData.roleMenus.some(m => m.messageId === messageId && m.roleId === role.id);
+    if (!exists) {
+        guildData.roleMenus.push({
+            messageId: messageId,
+            channelId: channel.id,
+            roleId: role.id,
+            label: label || role.name
+        });
+        storage.saveData(data);
+    }
+}
+
 module.exports = {
-    createRoleMenu
+    createRoleMenu,
+    addButtonToMenu
 };
