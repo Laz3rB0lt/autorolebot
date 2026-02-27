@@ -24,15 +24,15 @@ All commands require `Manage Guild` permission.
 
 ### Autorole Commands
 ```
-!autorole add <role>              # Add a role to autorole list
-!autorole remove <role>           # Remove a role from autorole list
-!autorole delay <seconds>         # Set delay before assigning roles
-!autorole ignorebots <true|false> # Toggle bot account filtering
+/autorole add <role>              # Add a role to autorole list
+/autorole remove <role>           # Remove a role from autorole list
+/autorole delay <seconds>         # Set delay before assigning roles
+/autorole ignorebots <true|false> # Toggle bot account filtering
 ```
 
 ### Role Menu Commands
 ```
-!rolemenu create <role> [label]   # Create a button role menu
+/rolemenu create <role> [label]   # Create a button role menu
 ```
 
 ## Setup

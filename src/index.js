@@ -1,10 +1,7 @@
-const { Client, GatewayIntentBits, Partials, InteractionType } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, InteractionType, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const storage = require('./storage');
 const autorole = require('./autorole');
 const rolesModule = require('./roles');
-
-// command prefix
-const PREFIX = '!';
 
 const client = new Client({
     intents: [
@@ -16,10 +13,94 @@ const client = new Client({
     partials: [Partials.Channel]
 });
 
+// Slash command definitions
+const commands = [
+    new SlashCommandBuilder()
+        .setName('autorole')
+        .setDescription('Configure autorole settings')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('add')
+                .setDescription('Add a role to autorole list')
+                .addRoleOption(option =>
+                    option
+                        .setName('role')
+                        .setDescription('The role to add')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('remove')
+                .setDescription('Remove a role from autorole list')
+                .addRoleOption(option =>
+                    option
+                        .setName('role')
+                        .setDescription('The role to remove')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('delay')
+                .setDescription('Set delay before assigning roles')
+                .addIntegerOption(option =>
+                    option
+                        .setName('seconds')
+                        .setDescription('Delay in seconds (0 = no delay)')
+                        .setRequired(true)
+                        .setMinValue(0)
+                )
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('ignorebots')
+                .setDescription('Toggle whether to ignore bot accounts')
+                .addBooleanOption(option =>
+                    option
+                        .setName('enabled')
+                        .setDescription('Enable or disable bot filtering')
+                        .setRequired(true)
+                )
+        ),
+
+    new SlashCommandBuilder()
+        .setName('rolemenu')
+        .setDescription('Manage interactive role menus')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('create')
+                .setDescription('Create a new role menu button')
+                .addRoleOption(option =>
+                    option
+                        .setName('role')
+                        .setDescription('The role to toggle')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option
+                        .setName('label')
+                        .setDescription('Button label (defaults to role name)')
+                        .setRequired(false)
+                )
+        )
+];
+
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
 
-    // clean up any menus whose messages have been deleted
+    // Register slash commands globally
+    try {
+        console.log('Registering slash commands...');
+        await client.application.commands.set(commands);
+        console.log('Slash commands registered successfully');
+    } catch (err) {
+        console.error('Failed to register slash commands', err);
+    }
+
+    // Clean up stale role menus
     const data = storage.loadData();
     let dirty = false;
     for (const guildId of Object.keys(data)) {
@@ -44,106 +125,88 @@ client.once('ready', async () => {
     if (dirty) storage.saveData(data);
 });
 
-client.on('messageCreate', async message => {
-    if (!message.guild || message.author.bot) return;
-    if (!message.content.startsWith(PREFIX)) return;
-
-    const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-    const command = args.shift().toLowerCase();
-
-    // require manage guild or admin for configuration commands
-    const isAdmin = message.member.permissions.has('ManageGuild');
-
-    if (command === 'autorole') {
-        if (!isAdmin) return message.reply('You do not have permission to use this command.');
-        const sub = args.shift();
-        switch (sub) {
-            case 'add': {
-                const roleArg = args.join(' ');
-                const role =
-                    message.mentions.roles.first() ||
-                    message.guild.roles.cache.get(roleArg) ||
-                    message.guild.roles.cache.find(r => r.name === roleArg);
-                if (!role) return message.reply('Role not found');
-                autorole.setRole(message.guild, role.id);
-                return message.reply(`Autorole will now grant **${role.name}** on join.`);
-            }
-            case 'remove': {
-                const roleArg = args.join(' ');
-                const role =
-                    message.mentions.roles.first() ||
-                    message.guild.roles.cache.get(roleArg) ||
-                    message.guild.roles.cache.find(r => r.name === roleArg);
-                if (!role) return message.reply('Role not found');
-                autorole.removeRole(message.guild, role.id);
-                return message.reply(`Removed **${role.name}** from autorole list.`);
-            }
-            case 'delay': {
-                const secs = parseInt(args[0], 10);
-                if (isNaN(secs) || secs < 0) return message.reply('Please supply a valid number of seconds.');
-                autorole.setDelay(message.guild, secs);
-                return message.reply(`Autorole delay set to ${secs} second(s).`);
-            }
-            case 'ignorebots': {
-                const flag = args[0] && args[0].toLowerCase() === 'true';
-                autorole.setIgnoreBots(message.guild, flag);
-                return message.reply(`Autorole ignorebots set to ${flag}.`);
-            }
-            default:
-                return message.reply(
-                    '**Usage:**\n' +
-                        '!autorole add <role>\n' +
-                        '!autorole remove <role>\n' +
-                        '!autorole delay <seconds>\n' +
-                        '!autorole ignorebots <true|false>'
-                );
-        }
-    } else if (command === 'rolemenu') {
-        if (!isAdmin) return message.reply('You do not have permission to use this command.');
-        const sub = args.shift();
-        if (sub === 'create') {
-            const roleArg = args.shift();
-            if (!roleArg) return message.reply('Please specify a role to create a menu for.');
-            const label = args.join(' ');
-            const role =
-                message.mentions.roles.first() ||
-                message.guild.roles.cache.get(roleArg) ||
-                message.guild.roles.cache.find(r => r.name === roleArg);
-            if (!role) return message.reply('Role not found');
-            try {
-                await rolesModule.createRoleMenu(message, role, label);
-                return message.reply('Role menu created.');
-            } catch (err) {
-                console.error('Failed to create role menu', err);
-                return message.reply('There was an error creating the role menu.');
-            }
-        } else {
-            return message.reply('**Usage:**\n!rolemenu create <role> [label]');
-        }
-    }
-});
-
 client.on('interactionCreate', async interaction => {
-    if (interaction.type === InteractionType.MessageComponent && interaction.isButton()) {
-        const parts = interaction.customId.split(':');
-        if (parts[0] !== 'roleMenu') return;
-        const roleId = parts[2];
-        const member = interaction.member;
-        const role = interaction.guild.roles.cache.get(roleId);
-        if (!role) {
-            return interaction.reply({ content: 'Role no longer exists.', ephemeral: true });
-        }
-        try {
-            if (member.roles.cache.has(roleId)) {
-                await member.roles.remove(roleId);
-                await interaction.reply({ content: `Removed **${role.name}**`, ephemeral: true });
-            } else {
-                await member.roles.add(roleId);
-                await interaction.reply({ content: `Granted **${role.name}**`, ephemeral: true });
+    try {
+        // Handle button clicks for role menus
+        if (interaction.type === InteractionType.MessageComponent && interaction.isButton()) {
+            const parts = interaction.customId.split(':');
+            if (parts[0] !== 'roleMenu') return;
+            const roleId = parts[2];
+            const member = interaction.member;
+            const role = interaction.guild.roles.cache.get(roleId);
+            if (!role) {
+                return interaction.reply({ content: 'Role no longer exists.', ephemeral: true });
             }
-        } catch (err) {
-            console.error('Toggle role failed', err);
-            await interaction.reply({ content: 'Unable to update your roles. (Hierarchy?)', ephemeral: true });
+            try {
+                if (member.roles.cache.has(roleId)) {
+                    await member.roles.remove(roleId);
+                    await interaction.reply({ content: `Removed **${role.name}**`, ephemeral: true });
+                } else {
+                    await member.roles.add(roleId);
+                    await interaction.reply({ content: `Granted **${role.name}**`, ephemeral: true });
+                }
+            } catch (err) {
+                console.error('Toggle role failed', err);
+                await interaction.reply({ content: 'Unable to update your roles. (Hierarchy?)', ephemeral: true });
+            }
+            return;
+        }
+
+        // Handle slash commands
+        if (!interaction.isChatInputCommand()) return;
+
+        const { commandName, options } = interaction;
+
+        if (commandName === 'autorole') {
+            const subcommand = options.getSubcommand();
+            switch (subcommand) {
+                case 'add': {
+                    const role = options.getRole('role');
+                    autorole.setRole(interaction.guild, role.id);
+                    return interaction.reply(`✅ Autorole will now grant **${role.name}** on join.`);
+                }
+                case 'remove': {
+                    const role = options.getRole('role');
+                    autorole.removeRole(interaction.guild, role.id);
+                    return interaction.reply(`✅ Removed **${role.name}** from autorole list.`);
+                }
+                case 'delay': {
+                    const secs = options.getInteger('seconds');
+                    autorole.setDelay(interaction.guild, secs);
+                    return interaction.reply(`✅ Autorole delay set to ${secs} second(s).`);
+                }
+                case 'ignorebots': {
+                    const flag = options.getBoolean('enabled');
+                    autorole.setIgnoreBots(interaction.guild, flag);
+                    return interaction.reply(`✅ Autorole ignorebots set to ${flag}.`);
+                }
+            }
+        } else if (commandName === 'rolemenu') {
+            const subcommand = options.getSubcommand();
+            if (subcommand === 'create') {
+                const role = options.getRole('role');
+                const label = options.getString('label');
+                try {
+                    // Create a dummy message object that has the required properties
+                    const messageObj = {
+                        guild: interaction.guild,
+                        channel: interaction.channel,
+                        send: async (opts) => {
+                            return await interaction.channel.send(opts);
+                        }
+                    };
+                    await rolesModule.createRoleMenu(messageObj, role, label);
+                    return interaction.reply('✅ Role menu created in this channel.');
+                } catch (err) {
+                    console.error('Failed to create role menu', err);
+                    return interaction.reply({ content: 'There was an error creating the role menu.', ephemeral: true });
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Error handling interaction', err);
+        if (!interaction.replied && !interaction.deferred) {
+            interaction.reply({ content: 'An error occurred.', ephemeral: true }).catch(() => {});
         }
     }
 });
@@ -168,3 +231,4 @@ if (!token) {
     process.exit(1);
 }
 client.login(token);
+
